@@ -1,3 +1,6 @@
+
+# DO NOT USE!!!
+
 from cryptography.hazmat.primitives.asymmetric import dh, rsa, padding
 from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -26,7 +29,6 @@ def decrypt(aes_key, iv, ct):
     cipher = Cipher(algorithms.AES(aes_key), modes.CFB(iv))
     dec = cipher.decryptor()
     return dec.update(ct) + dec.finalize()
-
 
 # HMAC
 def make_hmac(key, data):
