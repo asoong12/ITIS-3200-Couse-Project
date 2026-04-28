@@ -61,7 +61,7 @@ replay messages are blocked
 
 -----------------------------------------------------------------
 
-to sucsessfully replay messages do:
+to successfully replay messages do:
 
 "python server.py --skip-seq" in a terminal
 "python attacker.py --replay" in another terminal
