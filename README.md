@@ -62,13 +62,13 @@ You will see a menu:
 ### What each attack demonstrates
 
 
- 1.  Passive intercept - Attacker prints raw bytes — cannot read content. AES prevents it. 
+ 1.  Passive intercept occurs when the attacker prints raw bytes but they cannot read content. AES prevents it. 
  
- 2.  Message tampering - Receiver prints `INTEGRITY FAILED` and drops the message. HMAC catches it. 
+ 2.  Message tampering is when the receiver prints `INTEGRITY FAILED` and drops the message. HMAC catches it. 
  
- 3.  Replay attack - Attacker replays a captured packet. Receiver prints `REPLAY DETECTED` and drops it. Sequence numbers catch it. 
+ 3.  Replay attack the attacker replays a captured packet. Receiver prints `REPLAY DETECTED` and drops it. Sequence numbers catch it. 
  
- 4.  Leaked key - Attacker decrypts the message and sends a forged one with a valid HMAC tag — showing that key secrecy is a prerequisite for all other protections. 
+ 4.  For the leaked key the attacker decrypts the message and sends a forged one with a valid HMAC tag. This shows that key secrecy is a prerequisite for all other protections and safeguards.
 
 ---
 
