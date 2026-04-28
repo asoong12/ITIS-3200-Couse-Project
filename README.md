@@ -51,18 +51,24 @@ You will see a menu:
 
 ```
 1. Passive intercept     — read raw encrypted traffic
+
 2. Message tampering     — corrupt ciphertext in transit
+
 3. Replay attack         — capture and resend a valid packet
+
 4. Leaked key            — decrypt and forge messages with stolen keys
 ```
 
 ### What each attack demonstrates
 
 
- 1  Passive intercept - Attacker prints raw bytes — cannot read content. AES prevents it. 
- 2  Message tampering - Receiver prints `INTEGRITY FAILED` and drops the message. HMAC catches it. 
- 3  Replay attack - Attacker replays a captured packet. Receiver prints `REPLAY DETECTED` and drops it. Sequence numbers catch it. 
- 4  Leaked key - Attacker decrypts the message and sends a forged one with a valid HMAC tag — showing that key secrecy is a prerequisite for all other protections. 
+ 1.  Passive intercept - Attacker prints raw bytes — cannot read content. AES prevents it. 
+ 
+ 2.  Message tampering - Receiver prints `INTEGRITY FAILED` and drops the message. HMAC catches it. 
+ 
+ 3.  Replay attack - Attacker replays a captured packet. Receiver prints `REPLAY DETECTED` and drops it. Sequence numbers catch it. 
+ 
+ 4.  Leaked key - Attacker decrypts the message and sends a forged one with a valid HMAC tag — showing that key secrecy is a prerequisite for all other protections. 
 
 ---
 
