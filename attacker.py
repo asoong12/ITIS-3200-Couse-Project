@@ -13,8 +13,8 @@ DO_SNIFF = "--sniff" in args
 if not any([DO_MITM, DO_REPLAY, DO_TAMPER, DO_SNIFF]):
     DO_MITM = DO_REPLAY = DO_TAMPER = DO_SNIFF = True
 
-def atk(msg): print(f"\033[95m[ATTACKER] {msg}\033[0m", flush=True)
-def plain(msg): print(f"\033[91m\033[1m[PLAINTEXT] {msg}\033[0m", flush=True)
+def atk(msg): print(f"[ATTACKER] {msg}", flush=True)
+def plain(msg): print(f"[PLAINTEXT] {msg}", flush=True)
 def sniff_log(direction, data):
     if DO_SNIFF:
         atk(f"[SNIFF] {direction} | {len(data)} bytes | {data[:32].hex()}...")

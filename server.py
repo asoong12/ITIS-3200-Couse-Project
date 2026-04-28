@@ -23,9 +23,9 @@ args = __import__("sys").argv[1:]
 SKIP_SEQ = "--skip-seq" in args
 SKIP_HMAC = "--skip-hmac" in args
 if SKIP_SEQ:
-    print("[SERVER] ⚠ FAIL MODE: --skip-seq — sequence numbers NOT enforced (replay attacks will succeed!)")
+    print("[SERVER] FAIL MODE: --skip-seq — sequence numbers NOT enforced (replay attacks will succeed!)")
 if SKIP_HMAC:
-    print("[SERVER] ⚠ FAIL MODE: --skip-hmac — HMAC NOT verified (tampered messages will be accepted!)")
+    print("[SERVER] FAIL MODE: --skip-hmac — HMAC NOT verified (tampered messages will be accepted!)")
 
 # Generate Server RSA keypair
 print("[SERVER] Loading RSA keypair from server_rsa_private.pem...")
@@ -106,7 +106,7 @@ def recv_encrypted(sock, aes_key: bytes, hmac_key: bytes) -> dict:
     ciphertext = base64.b64decode(packet["ciphertext"])
     mac = base64.b64decode(packet["hmac"])
     if SKIP_HMAC:
-        print("[SERVER] ⚠ Skipping HMAC check (--skip-hmac active).")
+        print("[SERVER] Skipping HMAC check (--skip-hmac active).")
     else:
         expected_mac = hmac.new(hmac_key, nonce + ciphertext, hashlib.sha256).digest()
         if not hmac.compare_digest(mac, expected_mac):
@@ -214,7 +214,7 @@ def handle_client(conn, addr):
             except (ConnectionError, ConnectionResetError, EOFError):
                 raise 
             except ValueError as e:
-                print(f"[SERVER] ⚠ Dropping bad packet from {username}: {e}")
+                print(f"[SERVER] Dropping bad packet from {username}: {e}")
                 send_encrypted(conn, {"type": "error", "text": f"Packet rejected: {e}"}, aes_key, hmac_key)
                 continue
 
@@ -223,7 +223,7 @@ def handle_client(conn, addr):
             if SKIP_SEQ:
                 pass # --skip-seq: accept any sequence number, replay attacks succeed
             elif seq != expected_seq:
-                print(f"[SERVER] ⚠ Replay/out-of-order from {username}: expected {expected_seq}, got {seq}")
+                print(f"[SERVER] Replay/out-of-order from {username}: expected {expected_seq}, got {seq}")
                 send_encrypted(conn, {"type": "error", "text": f"Bad sequence number (got {seq}, expected {expected_seq}). Possible replay attack!"}, aes_key, hmac_key)
                 continue
             expected_seq = seq + 1

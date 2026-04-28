@@ -40,16 +40,16 @@ FLAG_SKIP_HMAC = "--skip-hmac" in args
 FLAG_SKIP_SEQ = "--skip-seq" in args
 
 def warn(msg):
-    print(f"\033[93m[⚠ WARN] {msg}\033[0m")
+    print(f"[WARN] {msg}")
 
 def err(msg):
-    print(f"\033[91m[✗ ERROR] {msg}\033[0m")
+    print(f"[ERROR] {msg}")
 
 def ok(msg):
-    print(f"\033[92m[✓ OK] {msg}\033[0m")
+    print(f"[OK] {msg}")
 
 def info(msg):
-    print(f"\033[96m[INFO] {msg}\033[0m")
+    print(f"[INFO] {msg}")
 
 # Print active fail modes
 print("=" * 60)
@@ -154,10 +154,10 @@ def listen_for_messages(sock, aes_key, hmac_key, stop_event):
                         warn(f"Out-of-order message from {sender}: expected {expected_seq}, got {seq}.")
                     expected_seq = seq + 1
 
-                print(f"\n\033[1m[{sender}]\033[0m {text}")
+                print(f"\n[{sender}] {text}")
 
             elif mtype == "system":
-                print(f"\n\033[33m[SYSTEM] {msg.get('text', '')}\033[0m")
+                print(f"\n[SYSTEM] {msg.get('text', '')}")
             elif mtype == "error":
                 err(msg.get("text", "Unknown server error"))
 
