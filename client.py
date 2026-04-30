@@ -39,37 +39,21 @@ FLAG_SKIP_SIG_VERIFY = "--skip-sig-verify" in args
 FLAG_SKIP_HMAC = "--skip-hmac" in args
 FLAG_SKIP_SEQ = "--skip-seq" in args
 
-def warn(msg):
-    print(f"[WARN] {msg}")
-
-def err(msg):
-    print(f"[ERROR] {msg}")
-
-def ok(msg):
-    print(f"[OK] {msg}")
-
-def info(msg):
-    print(f"[INFO] {msg}")
-
 # Print active fail modes
-print("=" * 60)
-print(f" Secure Chat Client — User: {username}")
-print("=" * 60)
+print(f"Secure Chat Client — User: {username}")
 if FLAG_LEAK_KEY:
-    warn("FAIL MODE: --leak-key → AES session key will be printed!")
+    print(f"FAIL MODE: --leak-key: AES session key will be printed!")
 if FLAG_SKIP_SIG_VERIFY:
-    warn("FAIL MODE: --skip-sig-verify → RSA signatures NOT verified (MITM possible)!")
+    print(f"FAIL MODE: --skip-sig-verify: RSA signatures NOT verified")
 if FLAG_SKIP_HMAC:
-    warn("FAIL MODE: --skip-hmac → HMAC NOT checked (tampering undetected)!")
+    print(f"FAIL MODE: --skip-hmac: HMAC NOT checked")
 if FLAG_SKIP_SEQ:
-    warn("FAIL MODE: --skip-seq → Sequence numbers NOT checked (replay possible)!")
+    print(f"FAIL MODE: --skip-seq: Sequence numbers NOT checked")
 if not any([FLAG_LEAK_KEY, FLAG_SKIP_SIG_VERIFY, FLAG_SKIP_HMAC, FLAG_SKIP_SEQ]):
-    ok("All defenses ENABLED.")
-print("=" * 60)
-
+    print(f"All defenses ENABLED.")
 
 # Generate client RSA keypair
-info("Generating RSA keypair...")
+print(f"Generating RSA keypair")
 client_rsa_private = generate_private_key(public_exponent=65537, key_size=2048)
 client_rsa_public = client_rsa_private.public_key()
 client_rsa_pub_pem = client_rsa_public.public_bytes(
@@ -81,9 +65,9 @@ client_rsa_pub_pem = client_rsa_public.public_bytes(
 try:
     with open("server_rsa_public.pem", "rb") as f:
         PINNED_SERVER_RSA_PUB = serialization.load_pem_public_key(f.read(), backend=default_backend())
-    ok("Loaded pinned server RSA public key from server_rsa_public.pem")
+    print(f"Loaded pinned server RSA public key from server_rsa_public.pem")
 except FileNotFoundError:
-    warn("server_rsa_public.pem not found! Cannot verify server identity. MITM is undetectable!")
+    print(f"server_rsa_public.pem not found")
     PINNED_SERVER_RSA_PUB = None
 
 
@@ -121,11 +105,11 @@ def recv_encrypted(sock, aes_key: bytes, hmac_key: bytes) -> dict:
     mac = base64.b64decode(packet["hmac"])
 
     if FLAG_SKIP_HMAC:
-        warn("Skipping HMAC verification (--skip-hmac active).")
+        print(f"Skipping HMAC verification")
     else:
         expected_mac = hmac_lib.new(hmac_key, nonce + ciphertext, hashlib.sha256).digest()
         if not hmac_lib.compare_digest(mac, expected_mac):
-            raise ValueError("HMAC FAILED — message was tampered with!")
+            raise ValueError("HMAC FAILED, message was tampered with")
 
     aesgcm = AESGCM(aes_key)
     plaintext = aesgcm.decrypt(nonce, ciphertext, None)
@@ -145,13 +129,13 @@ def listen_for_messages(sock, aes_key, hmac_key, stop_event):
                 text = msg.get("text", "")
 
                 if FLAG_SKIP_SEQ:
-                    warn(f"Seq check skipped (--skip-seq). Got seq={seq}")
+                    print(f"Seq check skipped. Got seq={seq}")
                 else:
                     if seq < expected_seq:
-                        err(f"REPLAY ATTACK DETECTED from {sender}! seq={seq} already seen (expected >= {expected_seq}). Message DROPPED.")
+                        print(f"REPLAY ATTACK DETECTED from {sender}! seq={seq} already seen (expected >= {expected_seq}). Message DROPPED.")
                         continue
                     elif seq != expected_seq:
-                        warn(f"Out-of-order message from {sender}: expected {expected_seq}, got {seq}.")
+                        print(f"Out of order message from {sender}: expected {expected_seq}, got {seq}.")
                     expected_seq = seq + 1
 
                 print(f"\n[{sender}] {text}")
@@ -159,20 +143,20 @@ def listen_for_messages(sock, aes_key, hmac_key, stop_event):
             elif mtype == "system":
                 print(f"\n[SYSTEM] {msg.get('text', '')}")
             elif mtype == "error":
-                err(msg.get("text", "Unknown server error"))
+                print(msg.get("text", "Unknown server error"))
 
             print(f"[{username}] ", end="", flush=True)
 
         except ValueError as e:
-            err(str(e))
+            print(str(e))
             stop_event.set()
             break
         except (ConnectionError, EOFError):
-            info("Disconnected from server.")
+            print(f"Disconnected from server.")
             stop_event.set()
             break
         except Exception as e:
-            err(f"Receive error: {e}")
+            print(f"Receive error: {e}")
             stop_event.set()
             break
 
@@ -180,7 +164,7 @@ def listen_for_messages(sock, aes_key, hmac_key, stop_event):
 def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((HOST, PORT))
-    info(f"Connected to {HOST}:{PORT}")
+    print(f"Connected to {HOST}:{PORT}")
 
     # Receive server hello (RSA pub + DH params)
     length = int.from_bytes(recv_exact(sock, 4), "big")
@@ -205,17 +189,16 @@ def main():
         )
         if wire_pem != pinned_pem:
             if FLAG_SKIP_SIG_VERIFY:
-                warn("Server RSA key DOES NOT match pinned key (--skip-sig-verify: using wire key anyway)!")
                 server_rsa_pub = server_rsa_pub_from_wire
             else:
-                err("MITM DETECTED: Server sent a different RSA key than the pinned one! Aborting.")
+                print(f"MITM DETECTED: Server sent a different RSA key than the pinned one! Aborting.")
                 sock.close()
                 sys.exit(1)
         else:
-            ok("Server RSA key matches pinned key.")
+            print(f"Server RSA key matches pinned key.")
     else:
         server_rsa_pub = server_rsa_pub_from_wire
-        warn("No pinned key — trusting RSA key from wire (MITM undetectable).")
+        print(f"No pinned key")
     dh_params = serialization.load_pem_parameters(
         dh_params_pem.encode(), backend=default_backend()
     )
@@ -243,7 +226,7 @@ def main():
 
     # Verify server's RSA signature over its DH public key
     if FLAG_SKIP_SIG_VERIFY:
-        warn("Skipping RSA signature verification (--skip-sig-verify). MITM is now undetectable!")
+        print(f"Skipping RSA signature verification")
     else:
         try:
             server_rsa_pub.verify(
@@ -252,9 +235,9 @@ def main():
                 padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
                 hashes.SHA256()
             )
-            ok("Server RSA signature VERIFIED — no MITM on DH exchange.")
+            print(f"Server RSA signature verified.")
         except Exception:
-            err("Server RSA signature INVALID! Possible MITM attack. Aborting.")
+            print(f"Server RSA signature INVALID")
             sock.close()
             sys.exit(1)
 
@@ -272,10 +255,10 @@ def main():
     hmac_key = derived[32:]
 
     if FLAG_LEAK_KEY:
-        warn(f"AES session key (LEAKED): {aes_key.hex()}")
-        warn(f"HMAC key (LEAKED): {hmac_key.hex()}")
+        print(f"AES session key: {aes_key.hex()}")
+        print(f"HMAC key: {hmac_key.hex()}")
     else:
-        ok(f"Session keys derived. AES key fingerprint: {aes_key[:4].hex()}... (hidden)")
+        print(f"Session keys derived. AES key fingerprint: {aes_key[:4].hex()}")
 
     # Send client's signed DH public key
     client_sig = client_rsa_private.sign(
@@ -286,7 +269,7 @@ def main():
     sig_msg = json.dumps({"signature": base64.b64encode(client_sig).decode()}).encode()
     sock.sendall(len(sig_msg).to_bytes(4, "big") + sig_msg)
 
-    ok("Handshake complete. Secure session established!")
+    print(f"Handshake complete")
     print()
 
     stop_event = threading.Event()
@@ -312,7 +295,7 @@ def main():
     finally:
         stop_event.set()
         sock.close()
-        info("Client exited.")
+        print(f"Client exited.")
 
 
 if __name__ == "__main__":

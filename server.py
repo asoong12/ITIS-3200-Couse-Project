@@ -23,12 +23,12 @@ args = __import__("sys").argv[1:]
 SKIP_SEQ = "--skip-seq" in args
 SKIP_HMAC = "--skip-hmac" in args
 if SKIP_SEQ:
-    print("[SERVER] FAIL MODE: --skip-seq — sequence numbers NOT enforced (replay attacks will succeed!)")
+    print("sequence numbers NOT enforced")
 if SKIP_HMAC:
-    print("[SERVER] FAIL MODE: --skip-hmac — HMAC NOT verified (tampered messages will be accepted!)")
+    print("HMAC NOT verified")
 
 # Generate Server RSA keypair
-print("[SERVER] Loading RSA keypair from server_rsa_private.pem...")
+print("Loading RSA keypair")
 with open("server_rsa_private.pem", "rb") as f:
     server_rsa_private = serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
 server_rsa_public = server_rsa_private.public_key()
@@ -39,13 +39,13 @@ server_rsa_public_pem = server_rsa_public.public_bytes(
 ).decode()
 
 # Generate DH Parameters (shared by all)
-print("[SERVER] Generating DH parameters (this may take a moment)...")
+print("Generating DH parameters")
 dh_params = generate_parameters(generator=2, key_size=2048, backend=default_backend())
 dh_params_pem = dh_params.parameter_bytes(
     serialization.Encoding.PEM,
     serialization.ParameterFormat.PKCS3
 ).decode()
-print("[SERVER] DH parameters ready.")
+print("DH parameters ready")
 
 # Client state
 clients = {} # addr -> { socket, aes_key, hmac_key, username, rsa_pub }
@@ -61,7 +61,6 @@ def sign_data(data: bytes) -> str:
 
 
 def broadcast(message_dict: dict, exclude_addr=None):
-    """Encrypt and send to all connected clients (except sender)."""
     with clients_lock:
         snapshot = list(clients.items())
     for addr, info in snapshot:
@@ -70,7 +69,7 @@ def broadcast(message_dict: dict, exclude_addr=None):
         try:
             send_encrypted(info["socket"], message_dict, info["aes_key"], info["hmac_key"])
         except Exception as e:
-            print(f"[SERVER] Broadcast error to {addr}: {e}")
+            print(f"Broadcast error to {addr}: {e}")
 
 
 def send_encrypted(sock, message_dict: dict, aes_key: bytes, hmac_key: bytes):
@@ -106,20 +105,17 @@ def recv_encrypted(sock, aes_key: bytes, hmac_key: bytes) -> dict:
     ciphertext = base64.b64decode(packet["ciphertext"])
     mac = base64.b64decode(packet["hmac"])
     if SKIP_HMAC:
-        print("[SERVER] Skipping HMAC check (--skip-hmac active).")
+        print("Skipping HMAC check")
     else:
         expected_mac = hmac.new(hmac_key, nonce + ciphertext, hashlib.sha256).digest()
         if not hmac.compare_digest(mac, expected_mac):
-            raise ValueError("HMAC verification FAILED — message tampered!")
+            raise ValueError("HMAC verification FAILED!")
     aesgcm = AESGCM(aes_key)
     try:
         plaintext = aesgcm.decrypt(nonce, ciphertext, None)
     except Exception:
         if SKIP_HMAC:
-            # AES-GCM auth tag also failed — ciphertext was altered without keys.
-            # With --skip-hmac we surface this as a best-effort decode failure
-            # so the demo shows the message arriving corrupted rather than silently dropped.
-            raise ValueError("AES-GCM auth tag failed (ciphertext tampered — no MITM keys to re-encrypt properly)")
+            raise ValueError("AES-GCM auth tag FAILED")
         raise
     return json.loads(plaintext)
 
@@ -183,9 +179,9 @@ def handle_client(conn, addr):
                 padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
                 hashes.SHA256()
             )
-            print(f"[SERVER] RSA signature from {username}@{addr} VERIFIED ✓")
+            print(f"RSA signature from {username}@{addr} VERIFIED")
         except Exception:
-            print(f"[SERVER] RSA signature from {addr} INVALID — rejecting.")
+            print(f"RSA signature from {addr} INVALID")
             conn.close()
             return
 
@@ -200,7 +196,7 @@ def handle_client(conn, addr):
                 "seq_in": 0,
             }
 
-        print(f"[SERVER] {username}@{addr} fully authenticated. Session established.")
+        print(f"{username}@{addr} fully authenticated.")
 
         # Announce to all
         broadcast({"type": "system", "text": f"{username} joined the chat."}, exclude_addr=addr)
@@ -214,7 +210,7 @@ def handle_client(conn, addr):
             except (ConnectionError, ConnectionResetError, EOFError):
                 raise 
             except ValueError as e:
-                print(f"[SERVER] Dropping bad packet from {username}: {e}")
+                print(f"Dropping bad packet from {username}: {e}")
                 send_encrypted(conn, {"type": "error", "text": f"Packet rejected: {e}"}, aes_key, hmac_key)
                 continue
 
@@ -223,14 +219,14 @@ def handle_client(conn, addr):
             if SKIP_SEQ:
                 pass # --skip-seq: accept any sequence number, replay attacks succeed
             elif seq != expected_seq:
-                print(f"[SERVER] Replay/out-of-order from {username}: expected {expected_seq}, got {seq}")
+                print(f"Replay/out-of-order from {username}: expected {expected_seq}, got {seq}")
                 send_encrypted(conn, {"type": "error", "text": f"Bad sequence number (got {seq}, expected {expected_seq}). Possible replay attack!"}, aes_key, hmac_key)
                 continue
             expected_seq = seq + 1
 
             if msg.get("type") == "message":
                 text = msg.get("text", "")
-                print(f"[SERVER] [{username}] {text}")
+                print(f"[{username}] {text}")
                 broadcast({
                     "type": "message",
                     "sender": username,
@@ -240,9 +236,9 @@ def handle_client(conn, addr):
                 }, exclude_addr=addr)
 
     except (ConnectionError, ConnectionResetError, EOFError):
-        print(f"[SERVER] {addr} disconnected.")
+        print(f"{addr} disconnected.")
     except Exception as e:
-        print(f"[SERVER] Error with {addr}: {e}")
+        print(f"Error with {addr}: {e}")
     finally:
         with clients_lock:
             info = clients.pop(addr, None)
@@ -256,7 +252,7 @@ def main():
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((HOST, PORT))
     server.listen(10)
-    print(f"[SERVER] Listening on {HOST}:{PORT}")
+    print(f"Listening on {HOST}:{PORT}")
     while True:
         conn, addr = server.accept()
         t = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
