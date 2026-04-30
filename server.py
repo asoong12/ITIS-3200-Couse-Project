@@ -226,7 +226,7 @@ def handle_client(conn, addr):
 
             if msg.get("type") == "message":
                 text = msg.get("text", "")
-                print(f"[{username}] {text}")
+                print(f"[{username}] {text}", flush=True)
                 broadcast({
                     "type": "message",
                     "sender": username,
