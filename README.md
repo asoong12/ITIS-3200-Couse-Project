@@ -21,7 +21,7 @@ to defend against intercepting messages do:
 
 -----------------------------------------------------------------
 
-to sucsessfully intercept messages do:
+to successfully intercept messages do:
 
 "python server.py" in a terminal
 "python attacker.py --mitm --sniff" in another terminal
@@ -41,7 +41,7 @@ send messages and they will not go through
 
 -----------------------------------------------------------------
 
-to sucsessfully tamper messages do:
+to successfully tamper messages do:
 
 "python server.py --skip-hmac" in a terminal
 "python attacker.py --mitm --tamper" in another terminal
@@ -61,7 +61,7 @@ replay messages are blocked
 
 -----------------------------------------------------------------
 
-to sucsessfully replay messages do:
+to successfully replay messages do:
 
 "python server.py --skip-seq" in a terminal
 "python attacker.py --replay" in another terminal
