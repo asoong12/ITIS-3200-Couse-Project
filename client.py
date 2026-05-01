@@ -172,7 +172,7 @@ def main():
     server_rsa_pub_pem = server_hello["server_rsa_pub"]
     dh_params_pem = server_hello["dh_params"]
 
-    # Use the PINNED key for verification, not the one sent over the wire.
+    # Use the pinned key for verification
     # If attacker substitutes their own RSA key in the server hello, we ignore it
     # and verify against the pre-shared key we already have on disk.
     server_rsa_pub_from_wire = serialization.load_pem_public_key(
